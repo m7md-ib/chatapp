@@ -8,7 +8,10 @@ let socket = null;
 export const getSocket = () => {
   if (!socket) {
     socket = io(SOCKET_URL, {
-      autoConnect: false,
+      // FIX: was `autoConnect: false` — socket never connected, so NO
+      // messages were ever received and no events fired. Set to true so
+      // the socket connects as soon as it is first created.
+      autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -19,9 +22,14 @@ export const getSocket = () => {
 
 export const connectSocket = (userId) => {
   const s = getSocket();
-  if (!s.connected) {
-    s.connect();
+  // Socket is already auto-connecting; just register the user as online.
+  // Emit after connection is established (or immediately if already connected).
+  if (s.connected) {
     s.emit("user:online", userId);
+  } else {
+    s.once("connect", () => {
+      s.emit("user:online", userId);
+    });
   }
 };
 

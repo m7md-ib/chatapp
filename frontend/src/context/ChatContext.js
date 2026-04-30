@@ -1,5 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getSocket } from "../utils/socket";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
+import { getSocket, connectSocket } from "../utils/socket";
 import { useAuth } from "./AuthContext";
 import api from "../utils/api";
 
@@ -15,7 +22,15 @@ export const ChatProvider = ({ children }) => {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState({});
 
-  // Fetch all users on mount
+  // FIX (Bug 2): Keep a ref that always points to the current selectedUser.
+  // Socket listeners close over this ref instead of the state value, so they
+  // never see a stale selectedUser regardless of when they were registered.
+  const selectedUserRef = useRef(selectedUser);
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  // ── Fetch all users on mount ───────────────────────────────────────────────
   const fetchUsers = useCallback(async () => {
     try {
       const { data } = await api.get("/users");
@@ -29,7 +44,21 @@ export const ChatProvider = ({ children }) => {
     if (user) fetchUsers();
   }, [user, fetchUsers]);
 
-  // Set up socket listeners
+  // ── Connect socket & register user:online ──────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    // FIX (Bug 1): connectSocket was never called. Call it here so the socket
+    // actually connects and the server knows this user is online.
+    connectSocket(user._id);
+  }, [user]);
+
+  // ── Socket event listeners ─────────────────────────────────────────────────
+  // FIX (Bug 3): `selectedUser` has been removed from the dependency array.
+  // Previously, every time the user clicked a different contact, ALL listeners
+  // were torn down and immediately re-added, creating a window where incoming
+  // messages were silently dropped. Now listeners are registered once per
+  // authenticated session and read `selectedUserRef.current` for the freshest
+  // value of selectedUser without needing to re-subscribe.
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
@@ -37,32 +66,32 @@ export const ChatProvider = ({ children }) => {
     // Receive new message
     socket.on("message:receive", (message) => {
       setMessages((prev) => {
-        // Avoid duplicates
         if (prev.find((m) => m._id === message._id)) return prev;
         return [...prev, message];
       });
 
-      // Track unread count if not currently chatting with this sender
+      // FIX (Bug 2): use ref so we always compare against the *current*
+      // selected user, not the one captured when this effect first ran.
       setUnreadCounts((prev) => {
         const senderId = message.sender._id || message.sender;
-        if (selectedUser?._id !== senderId) {
+        if (selectedUserRef.current?._id !== senderId) {
           return { ...prev, [senderId]: (prev[senderId] || 0) + 1 };
         }
         return prev;
       });
     });
 
-    // Message sent confirmation (update temp message with real one)
+    // Message sent confirmation — replace temp or append
     socket.on("message:sent", (message) => {
       setMessages((prev) => {
-        // Replace temp message or add if not found
         const exists = prev.find((m) => m._id === message._id);
-        if (exists) return prev.map((m) => (m._id === message._id ? message : m));
+        if (exists)
+          return prev.map((m) => (m._id === message._id ? message : m));
         return [...prev, message];
       });
     });
 
-    // Online users update
+    // Online users list
     socket.on("users:online", (userIds) => {
       setOnlineUsers(userIds);
     });
@@ -80,14 +109,14 @@ export const ChatProvider = ({ children }) => {
       });
     });
 
-    // Messages seen notification
+    // Messages seen
     socket.on("messages:seen", ({ receiverId }) => {
       setMessages((prev) =>
         prev.map((m) =>
           m.receiver?._id === receiverId || m.receiver === receiverId
             ? { ...m, status: "seen" }
-            : m
-        )
+            : m,
+        ),
       );
     });
 
@@ -99,37 +128,42 @@ export const ChatProvider = ({ children }) => {
       socket.off("typing:stop");
       socket.off("messages:seen");
     };
-  }, [user, selectedUser]);
+  }, [user]); // ← selectedUser intentionally removed; ref handles freshness
 
-  // Load conversation when user is selected
-  const loadConversation = useCallback(async (otherUser) => {
-    setSelectedUser(otherUser);
-    setLoadingMessages(true);
-    try {
-      const { data } = await api.get(`/messages/${otherUser._id}`);
-      setMessages(data);
+  // ── Load conversation when a user is selected ──────────────────────────────
+  const loadConversation = useCallback(
+    async (otherUser) => {
+      setSelectedUser(otherUser);
+      selectedUserRef.current = otherUser; // keep ref in sync immediately
+      setLoadingMessages(true);
+      setMessages([]); // clear previous conversation while loading
+      try {
+        const { data } = await api.get(`/messages/${otherUser._id}`);
+        setMessages(data);
 
-      // Clear unread count for this user
-      setUnreadCounts((prev) => {
-        const updated = { ...prev };
-        delete updated[otherUser._id];
-        return updated;
-      });
+        // Clear unread badge for this user
+        setUnreadCounts((prev) => {
+          const updated = { ...prev };
+          delete updated[otherUser._id];
+          return updated;
+        });
 
-      // Mark messages as seen
-      const socket = getSocket();
-      socket.emit("messages:seen", {
-        senderId: otherUser._id,
-        receiverId: user._id,
-      });
-    } catch (error) {
-      console.error("Error loading conversation:", error);
-    } finally {
-      setLoadingMessages(false);
-    }
-  }, [user]);
+        // Tell server messages have been seen
+        const socket = getSocket();
+        socket.emit("messages:seen", {
+          senderId: otherUser._id,
+          receiverId: user._id,
+        });
+      } catch (error) {
+        console.error("Error loading conversation:", error);
+      } finally {
+        setLoadingMessages(false);
+      }
+    },
+    [user],
+  );
 
-  // Send a text message
+  // ── Send helpers ───────────────────────────────────────────────────────────
   const sendMessage = useCallback(
     (content) => {
       if (!selectedUser || !content.trim()) return;
@@ -141,10 +175,9 @@ export const ChatProvider = ({ children }) => {
         type: "text",
       });
     },
-    [user, selectedUser]
+    [user, selectedUser],
   );
 
-  // Send an image message
   const sendImageMessage = useCallback(
     (imageUrl) => {
       if (!selectedUser) return;
@@ -157,7 +190,7 @@ export const ChatProvider = ({ children }) => {
         imageUrl,
       });
     },
-    [user, selectedUser]
+    [user, selectedUser],
   );
 
   const isOnline = (userId) => onlineUsers.includes(userId?.toString());
