@@ -8,27 +8,25 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount, restore session from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     const token = localStorage.getItem("token");
 
     if (storedUser && token) {
-      const parsedUser = JSON.parse(storedUser);
-      setUser(parsedUser);
-      connectSocket(parsedUser._id);
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        connectSocket(parsedUser._id);
+      } catch (e) {
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+      }
     }
     setLoading(false);
   }, []);
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
-
-    // ROOT CAUSE FIX: The API returns { token, user: {...} }.
-    // Previously the entire `data` object was stored as the user, so
-    // `user._id` was undefined everywhere — breaking message fetching,
-    // socket registration, and seen receipts.
-    // Now we correctly split token and user before storing them.
     const { token, user: userData } = data;
 
     localStorage.setItem("token", token);
@@ -44,8 +42,6 @@ export const AuthProvider = ({ children }) => {
       email,
       password,
     });
-
-    // Same fix applied to register
     const { token, user: userData } = data;
 
     localStorage.setItem("token", token);
@@ -62,7 +58,6 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // Update user state (e.g., after avatar change)
   const updateUser = (updatedUser) => {
     const merged = { ...user, ...updatedUser };
     setUser(merged);
