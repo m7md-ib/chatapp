@@ -23,20 +23,36 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data));
-    setUser(data);
-    connectSocket(data._id);
-    return data;
+
+    // ROOT CAUSE FIX: The API returns { token, user: {...} }.
+    // Previously the entire `data` object was stored as the user, so
+    // `user._id` was undefined everywhere — breaking message fetching,
+    // socket registration, and seen receipts.
+    // Now we correctly split token and user before storing them.
+    const { token, user: userData } = data;
+
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(userData));
+    setUser(userData);
+    connectSocket(userData._id);
+    return userData;
   };
 
   const register = async (name, email, password) => {
-    const { data } = await api.post("/auth/register", { name, email, password });
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data));
-    setUser(data);
-    connectSocket(data._id);
-    return data;
+    const { data } = await api.post("/auth/register", {
+      name,
+      email,
+      password,
+    });
+
+    // Same fix applied to register
+    const { token, user: userData } = data;
+
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(userData));
+    setUser(userData);
+    connectSocket(userData._id);
+    return userData;
   };
 
   const logout = () => {
@@ -54,7 +70,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser, loading }}>
+    <AuthContext.Provider
+      value={{ user, login, register, logout, updateUser, loading }}
+    >
       {children}
     </AuthContext.Provider>
   );
