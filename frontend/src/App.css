@@ -897,33 +897,308 @@ body,
   background: var(--text-muted);
 }
 
-/* ── Responsive ───────────────────────────────── */
+/* ══════════════════════════════════════════════
+   RESPONSIVE — Mobile-first overhaul
+   Breakpoints:
+     ≤ 768px  → tablet / large phone
+     ≤ 480px  → small phone (320 px minimum)
+   ══════════════════════════════════════════════ */
+
+/* ── Global mobile safety net ─────────────────── */
+html,
+body,
+#root {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* ── Tablet + large phones (≤ 768 px) ─────────── */
 @media (max-width: 768px) {
   :root {
-    --sidebar-width: 100vw;
+    --sidebar-width: 100vw; /* sidebar takes full width when open */
+    --header-height: 56px;
+    --input-height: 64px;
   }
 
+  /* ── Layout: stack sidebar over chat ─────── */
   .app-layout {
     position: relative;
+    overflow: hidden;
+    width: 100vw;
+    max-width: 100vw;
   }
 
+  /* Sidebar: off-canvas, slides in from left */
   .sidebar {
-    position: absolute;
-    z-index: 10;
-    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 200;
+    height: 100dvh; /* dynamic viewport height — avoids browser chrome */
+    width: 100vw;
+    min-width: unset;
     transform: translateX(0);
-    transition: transform var(--transition);
+    transition: transform 0.25s ease;
+    box-shadow: var(--shadow-lg);
   }
 
+  /* Add .hidden class from JS when a chat is selected */
   .sidebar.hidden {
     transform: translateX(-100%);
+    pointer-events: none;
   }
 
+  /* Chat area always fills screen behind sidebar */
   .main-content {
-    width: 100%;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* ── Chat header: add back-button space ───── */
+  .chat-header {
+    padding: 0 12px 0 4px;
+    gap: 8px;
+  }
+
+  /* Back button — shown only on mobile.
+     In your React component render:
+       <button className="back-btn" onClick={() => sidebar.classList.remove('hidden')}>‹</button>
+     This class handles the style so no logic changes are needed. */
+  .back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    padding: 10px 8px 10px 4px;
+    cursor: pointer;
+    font-size: 22px;
+    line-height: 1;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .chat-header-user {
+    gap: 10px;
+    flex: 1;
+    min-width: 0; /* allow text to truncate */
+  }
+
+  .chat-header-info h3 {
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Messages area ────────────────────────── */
+  .messages-area {
+    padding: 12px 3% 8px; /* tighter side padding on mobile */
+    /* Ensure the area scrolls and doesn't overflow horizontally */
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .message-bubble {
-    max-width: 85%;
+    max-width: 82%;
+    min-width: 60px;
+  }
+
+  .msg-text {
+    font-size: 14px;
+  }
+
+  /* ── Input bar: always stick to bottom ────── */
+  .chat-input-bar {
+    position: sticky;
+    bottom: 0;
+    /* Respect the iOS safe area (home bar) */
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px;
+    gap: 8px;
+    z-index: 10;
+  }
+
+  .chat-textarea {
+    font-size: 16px; /* ≥ 16 px prevents iOS auto-zoom on focus */
+    padding: 9px 14px;
+  }
+
+  /* Touch-friendly icon buttons */
+  .icon-btn,
+  .send-btn {
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ── Sidebar internals ────────────────────── */
+  .sidebar-header {
+    padding: 14px 16px;
+  }
+
+  .user-item {
+    padding: 13px 16px; /* more vertical touch target */
+  }
+
+  .search-bar {
+    padding: 10px 14px;
+  }
+
+  /* ── Auth card ────────────────────────────── */
+  .auth-card {
+    padding: 28px 24px;
+    border-radius: var(--radius-lg);
+  }
+
+  .auth-logo h1 {
+    font-size: 24px;
+  }
+
+  /* ── Chat empty state ─────────────────────── */
+  .chat-empty {
+    padding: 24px 20px;
+    text-align: center;
+  }
+
+  .chat-empty h2 {
+    font-size: 18px;
+  }
+}
+
+/* ── Small phones (≤ 480 px) ──────────────────── */
+@media (max-width: 480px) {
+  :root {
+    --header-height: 52px;
+    --input-height: 60px;
+  }
+
+  /* ── Messages ─────────────────────────────── */
+  .message-bubble {
+    max-width: 88%;
+    padding: 7px 10px 5px;
+    border-radius: var(--radius-md);
+  }
+
+  .msg-text {
+    font-size: 13.5px;
+  }
+
+  .msg-time {
+    font-size: 10px;
+  }
+
+  /* Image messages: don't overflow screen */
+  .msg-image-container,
+  .msg-image {
+    max-width: calc(100vw - 80px);
+  }
+
+  /* ── Input bar ────────────────────────────── */
+  .chat-input-bar {
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
+    gap: 6px;
+  }
+
+  .chat-textarea {
+    padding: 8px 12px;
+    max-height: 100px;
+  }
+
+  .icon-btn,
+  .send-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .icon-btn svg,
+  .send-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* ── Sidebar ──────────────────────────────── */
+  .sidebar-header {
+    padding: 12px 14px;
+  }
+
+  .sidebar-user-name {
+    font-size: 14px;
+  }
+
+  .user-item {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .user-item-name {
+    font-size: 14px;
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .avatar span {
+    font-size: 14px;
+  }
+
+  /* ── Chat header ──────────────────────────── */
+  .chat-header {
+    padding: 0 10px 0 2px;
+  }
+
+  .chat-header-info h3 {
+    font-size: 14px;
+  }
+
+  .chat-header-status {
+    font-size: 11px;
+  }
+
+  /* ── Auth ─────────────────────────────────── */
+  .auth-card {
+    padding: 24px 16px;
+  }
+
+  .logo-icon {
+    font-size: 40px;
+  }
+
+  .auth-logo h1 {
+    font-size: 22px;
+  }
+
+  .form-group input {
+    font-size: 16px; /* prevents iOS zoom */
+    padding: 11px 14px;
+  }
+
+  .btn-primary {
+    padding: 13px;
+    font-size: 15px;
+  }
+
+  /* ── Sidebar overlay backdrop ─────────────── */
+  /* Render a .sidebar-backdrop div in React behind the sidebar */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 199;
+    opacity: 1;
+    transition: opacity 0.25s ease;
+  }
+
+  .sidebar-backdrop.hidden {
+    opacity: 0;
+    pointer-events: none;
   }
 }
