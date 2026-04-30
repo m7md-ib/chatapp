@@ -11,6 +11,10 @@ const AppContent = () => {
   const { user, loading } = useAuth();
   const [showLogin, setShowLogin] = useState(true);
 
+  // Mobile sidebar visibility — true = sidebar open (default on mobile),
+  // false = chat window visible. Desktop ignores this via CSS.
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   if (loading) {
     return (
       <div className="splash-screen">
@@ -36,9 +40,21 @@ const AppContent = () => {
   return (
     <ChatProvider>
       <div className="app-layout">
-        <Sidebar />
+        {/* Sidebar — gets .hidden on mobile when a chat is open */}
+        <Sidebar
+          className={sidebarOpen ? "" : "hidden"}
+          onSelectUser={() => setSidebarOpen(false)}
+        />
+
+        {/* Dark backdrop — only visible on mobile when sidebar is open */}
+        <div
+          className={`sidebar-backdrop ${sidebarOpen ? "" : "hidden"}`}
+          onClick={() => setSidebarOpen(false)}
+        />
+
         <main className="main-content">
-          <ChatWindow />
+          {/* Pass onBack so ChatWindow can show the back button on mobile */}
+          <ChatWindow onBack={() => setSidebarOpen(true)} />
         </main>
       </div>
     </ChatProvider>

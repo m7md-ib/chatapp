@@ -3,13 +3,17 @@ import { useAuth } from "../../context/AuthContext";
 import { useChat } from "../../context/ChatContext";
 import { formatDistanceToNow } from "date-fns";
 
-const Sidebar = () => {
+// onSelectUser — called after a user is clicked, used by App.js on mobile
+// to hide the sidebar and reveal the chat window.
+// className   — App.js passes "hidden" on mobile when a chat is open.
+const Sidebar = ({ className = "", onSelectUser }) => {
   const { user, logout } = useAuth();
-  const { users, selectedUser, setSelectedUser, isOnline, unreadCounts } = useChat();
+  const { users, selectedUser, setSelectedUser, isOnline, unreadCounts } =
+    useChat();
   const [search, setSearch] = useState("");
 
   const filteredUsers = users.filter((u) =>
-    u.name.toLowerCase().includes(search.toLowerCase())
+    u.name.toLowerCase().includes(search.toLowerCase()),
   );
 
   const getInitials = (name) =>
@@ -20,8 +24,13 @@ const Sidebar = () => {
       .toUpperCase()
       .slice(0, 2);
 
+  const handleSelectUser = (u) => {
+    setSelectedUser(u); // loads conversation (ChatContext)
+    onSelectUser?.(); // tells App.js to hide sidebar on mobile
+  };
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${className}`.trim()}>
       {/* Header */}
       <div className="sidebar-header">
         <div className="sidebar-user" title={user.email}>
@@ -39,7 +48,12 @@ const Sidebar = () => {
           </div>
         </div>
         <button className="logout-btn" onClick={logout} title="Logout">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
@@ -49,7 +63,12 @@ const Sidebar = () => {
 
       {/* Search */}
       <div className="search-bar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
@@ -64,7 +83,8 @@ const Sidebar = () => {
       {/* User list */}
       <div className="users-list">
         <div className="users-list-label">
-          {filteredUsers.length} {filteredUsers.length === 1 ? "Contact" : "Contacts"}
+          {filteredUsers.length}{" "}
+          {filteredUsers.length === 1 ? "Contact" : "Contacts"}
         </div>
 
         {filteredUsers.length === 0 ? (
@@ -74,7 +94,7 @@ const Sidebar = () => {
             <div
               key={u._id}
               className={`user-item ${selectedUser?._id === u._id ? "active" : ""}`}
-              onClick={() => setSelectedUser(u)}
+              onClick={() => handleSelectUser(u)}
             >
               <div className="avatar">
                 {u.avatar ? (
@@ -90,7 +110,9 @@ const Sidebar = () => {
                   <span className="user-item-name">{u.name}</span>
                   {u.lastSeen && !isOnline(u._id) && (
                     <span className="user-item-time">
-                      {formatDistanceToNow(new Date(u.lastSeen), { addSuffix: true })}
+                      {formatDistanceToNow(new Date(u.lastSeen), {
+                        addSuffix: true,
+                      })}
                     </span>
                   )}
                 </div>

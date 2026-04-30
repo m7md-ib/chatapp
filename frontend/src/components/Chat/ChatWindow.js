@@ -12,9 +12,11 @@ const getDateLabel = (date) => {
   return format(d, "MMMM d, yyyy");
 };
 
-const ChatWindow = () => {
+// onBack — passed from App.js; called when the ‹ back button is tapped on mobile.
+const ChatWindow = ({ onBack }) => {
   const { user } = useAuth();
-  const { selectedUser, messages, loadingMessages, isOnline, isTyping } = useChat();
+  const { selectedUser, messages, loadingMessages, isOnline, isTyping } =
+    useChat();
   const bottomRef = useRef(null);
 
   // Auto-scroll to latest message
@@ -52,6 +54,16 @@ const ChatWindow = () => {
     <div className="chat-window">
       {/* Chat Header */}
       <div className="chat-header">
+        {/* Back button — only visually shown on mobile via CSS.
+            onBack tells App.js to slide the sidebar back in. */}
+        <button
+          className="back-btn"
+          onClick={onBack}
+          aria-label="Back to contacts"
+        >
+          ‹
+        </button>
+
         <div className="chat-header-user">
           <div className="avatar">
             {selectedUser.avatar ? (
@@ -59,7 +71,9 @@ const ChatWindow = () => {
             ) : (
               <span>{getInitials(selectedUser.name)}</span>
             )}
-            {isOnline(selectedUser._id) && <span className="status-dot online" />}
+            {isOnline(selectedUser._id) && (
+              <span className="status-dot online" />
+            )}
           </div>
           <div className="chat-header-info">
             <h3>{selectedUser.name}</h3>
@@ -67,8 +81,8 @@ const ChatWindow = () => {
               {isTyping(selectedUser._id)
                 ? "typing..."
                 : isOnline(selectedUser._id)
-                ? "Online"
-                : "Offline"}
+                  ? "Online"
+                  : "Offline"}
             </span>
           </div>
         </div>
@@ -88,18 +102,14 @@ const ChatWindow = () => {
         ) : (
           Object.entries(groupedMessages).map(([label, msgs]) => (
             <div key={label}>
-              {/* Date divider */}
               <div className="date-divider">
                 <span>{label}</span>
               </div>
-
               {msgs.map((message) => (
                 <MessageBubble
                   key={message._id}
                   message={message}
-                  isOwn={
-                    (message.sender._id || message.sender) === user._id
-                  }
+                  isOwn={(message.sender._id || message.sender) === user._id}
                 />
               ))}
             </div>
