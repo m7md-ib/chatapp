@@ -16,28 +16,40 @@ const server = http.createServer(app);
 // Connect to MongoDB
 connectDB();
 
-// CORS configuration — allows both local dev and production frontend
+// CORS configuration — allows your Vercel frontend + local dev
 const allowedOrigins = [
-  process.env.CLIENT_URL || "http://localhost:3000",
-  "https://chatapp-frontend.vercel.app", // update with your Vercel URL
+  "http://localhost:3000",
+  "http://localhost:5173",
+  // Add every frontend URL here, or use CLIENT_URL env var
+  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",") : []),
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
+      // Allow requests with no origin (Postman, mobile apps, curl)
       if (!origin) return callback(null, true);
-      if (
-        allowedOrigins.includes(origin) ||
-        process.env.NODE_ENV === "development"
-      ) {
+
+      // Allow any Vercel preview/production deployment
+      if (origin.match(/https:\/\/.*\.vercel\.app$/))
         return callback(null, true);
-      }
-      callback(new Error("Not allowed by CORS"));
+
+      // Allow explicitly listed origins
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      // Allow all in development
+      if (process.env.NODE_ENV !== "production") return callback(null, true);
+
+      callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
+
+// Handle preflight requests for all routes
+app.options("*", cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -55,10 +67,23 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", message: "ChatApp API is running" });
 });
 
+// Reusable origin checker (used by both Express CORS and Socket.IO)
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (origin.match(/https:\/\/.*\.vercel\.app$/)) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  if (process.env.NODE_ENV !== "production") return true;
+  return false;
+};
+
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      isAllowedOrigin(origin)
+        ? callback(null, true)
+        : callback(new Error(`CORS blocked: ${origin}`));
+    },
     methods: ["GET", "POST"],
     credentials: true,
   },
