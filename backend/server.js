@@ -1,4 +1,18 @@
 require("dotenv").config();
+
+// ── Fail fast if critical env vars are missing ──────────────────────────────
+const REQUIRED_ENV = ["MONGO_URI", "JWT_SECRET"];
+const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missing.length) {
+  console.error(
+    `❌ Missing required environment variables: ${missing.join(", ")}`,
+  );
+  console.error(
+    "   Set them in your .env file or Render dashboard, then restart.",
+  );
+  process.exit(1);
+}
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");

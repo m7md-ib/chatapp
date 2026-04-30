@@ -1,8 +1,11 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Generate JWT token
+// Generate JWT token — throws clearly if JWT_SECRET is missing
 const generateToken = (id) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET environment variable is not set");
+  }
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
 };
 
@@ -32,8 +35,35 @@ const register = async (req, res) => {
       token: generateToken(user._id),
     });
   } catch (error) {
-    console.error("Register error:", error);
-    res.status(500).json({ message: "Server error during registration" });
+    console.error("Register error:", error.name, error.message);
+
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Email already in use" });
+    }
+    if (error.name === "ValidationError") {
+      const msg = Object.values(error.errors)
+        .map((e) => e.message)
+        .join(", ");
+      return res.status(400).json({ message: msg });
+    }
+    if (error.message.includes("JWT_SECRET")) {
+      return res
+        .status(500)
+        .json({ message: "Server misconfiguration: JWT_SECRET missing" });
+    }
+    if (
+      error.name === "MongoNetworkError" ||
+      error.name === "MongooseServerSelectionError"
+    ) {
+      return res
+        .status(500)
+        .json({ message: "Database connection failed. Check MONGO_URI." });
+    }
+
+    res.status(500).json({
+      message: "Server error during registration",
+      detail: process.env.NODE_ENV !== "production" ? error.message : undefined,
+    });
   }
 };
 
@@ -45,18 +75,25 @@ const login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
     }
 
-    // Explicitly include password for comparison
+    // Explicitly select password — excluded by default via `select: false` on schema
     const user = await User.findOne({ email }).select("+password");
-    if (!user || !(await user.comparePassword(password))) {
+
+    if (!user) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Update last seen
-    user.lastSeen = new Date();
-    await user.save({ validateBeforeSave: false });
+    const passwordMatch = await user.comparePassword(password);
+    if (!passwordMatch) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    // Use findByIdAndUpdate to avoid re-triggering password hashing hook
+    await User.findByIdAndUpdate(user._id, { lastSeen: new Date() });
 
     res.json({
       _id: user._id,
@@ -66,8 +103,26 @@ const login = async (req, res) => {
       token: generateToken(user._id),
     });
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Server error during login" });
+    console.error("Login error:", error.name, error.message);
+
+    if (error.message.includes("JWT_SECRET")) {
+      return res
+        .status(500)
+        .json({ message: "Server misconfiguration: JWT_SECRET missing" });
+    }
+    if (
+      error.name === "MongoNetworkError" ||
+      error.name === "MongooseServerSelectionError"
+    ) {
+      return res
+        .status(500)
+        .json({ message: "Database connection failed. Check MONGO_URI." });
+    }
+
+    res.status(500).json({
+      message: "Server error during login",
+      detail: process.env.NODE_ENV !== "production" ? error.message : undefined,
+    });
   }
 };
 
